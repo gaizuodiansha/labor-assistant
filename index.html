@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#F9F5F0">
+    <title>产程助手 - 宫缩记录</title>
+    <link rel="manifest" href="manifest.json">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- 免责声明弹窗 -->
+    <div id="disclaimerModal" class="modal">
+        <div class="modal-content">
+            <h2>⚠️ 免责声明</h2>
+            <p>本工具仅供记录参考，<strong>不能替代专业医疗判断</strong>。</p>
+            <p>如有任何疑问或紧急情况，请立即咨询医护人员。</p>
+            <button id="acceptDisclaimer" class="btn-primary">我已了解</button>
+        </div>
+    </div>
+
+    <!-- 产程未结束提示 -->
+    <div id="unfinishedModal" class="modal hidden">
+        <div class="modal-content">
+            <h3>⏸️ 上次宫缩未结束</h3>
+            <p>检测到上次宫缩记录未结束，请选择处理方式：</p>
+            <div class="modal-actions">
+                <button id="endNowBtn" class="btn-primary">结束于现在</button>
+                <button id="discardBtn" class="btn-secondary">丢弃本次</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 合并提示条 -->
+    <div id="mergeToast" class="toast hidden">
+        <span>检测到两次很短的宫缩，是否合并为一次？</span>
+        <div class="toast-actions">
+            <button id="mergeBtn" class="btn-small">合并</button>
+            <button id="ignoreMergeBtn" class="btn-small btn-secondary">忽略</button>
+        </div>
+    </div>
+
+    <!-- 撤销提示条 -->
+    <div id="undoToast" class="toast hidden">
+        <span id="undoMessage">操作已执行</span>
+        <button id="undoBtn" class="btn-small">撤销</button>
+    </div>
+
+    <!-- 头部导航 -->
+    <header class="header">
+        <h1>产程助手</h1>
+        <div class="header-actions">
+            <button id="historyBtn" class="icon-btn" title="历史记录">📋</button>
+            <button id="settingsBtn" class="icon-btn" title="设置">⚙️</button>
+        </div>
+    </header>
+
+    <!-- 主界面 -->
+    <main id="mainView" class="view active">
+        <!-- 数据统计栏 -->
+        <section class="stats-bar">
+            <div class="stat-row">
+                <span class="stat-label">开始</span>
+                <span id="laborStartTime" class="stat-value">--:--</span>
+                <span class="stat-separator">·</span>
+                <span class="stat-label">已持续</span>
+                <span id="laborDuration" class="stat-value">--:--</span>
+                <span class="stat-separator">·</span>
+                <span class="stat-label">宫缩</span>
+                <span id="contractionCount" class="stat-value">0</span><span class="stat-unit">次</span>
+            </div>
+            <div class="stat-row">
+                <span class="stat-label">平均间隔</span>
+                <span id="avgInterval" class="stat-value">--:--</span>
+                <span class="stat-separator">|</span>
+                <span class="stat-label">平均持续</span>
+                <span id="avgDuration" class="stat-value">--s</span>
+                <span class="stat-separator">|</span>
+                <span class="stat-label">平均强度</span>
+                <span id="avgPain" class="stat-value">-</span>
+            </div>
+        </section>
+
+        <!-- 宫缩规律图 -->
+        <section class="chart-section">
+            <div class="chart-header">
+                <span class="chart-title">⏱️ 宫缩规律图（最近30分钟）</span>
+            </div>
+            <canvas id="contractionChart" width="375" height="80"></canvas>
+            <div class="chart-labels">
+                <span>-30m</span>
+                <span>-20m</span>
+                <span>-10m</span>
+                <span>现在</span>
+            </div>
+        </section>
+
+        <!-- 当前状态 -->
+        <section class="current-status">
+            <span id="statusText">等待开始...</span>
+        </section>
+
+        <!-- 大按钮 -->
+        <section class="button-section">
+            <button id="mainBtn" class="main-btn" data-state="idle">
+                <span class="btn-icon">😣</span>
+                <span class="btn-text">疼</span>
+                <span class="btn-hint">感到疼痛时按下</span>
+                <span id="timerDisplay" class="timer hidden">00:00</span>
+            </button>
+        </section>
+
+        <!-- 疼痛强度评分（动态显示） -->
+        <section id="painRatingSection" class="pain-rating hidden">
+            <span class="rating-label">疼痛强度（可选）</span>
+            <div class="rating-stars">
+                <span class="star" data-value="1">☆</span>
+                <span class="star" data-value="2">☆</span>
+                <span class="star" data-value="3">☆</span>
+                <span class="star" data-value="4">☆</span>
+                <span class="star" data-value="5">☆</span>
+            </div>
+            <span id="painValue" class="pain-value"></span>
+        </section>
+
+        <!-- 伴随事件按钮 -->
+        <section class="events-section">
+            <button class="event-btn" data-event="water">
+                <span class="event-icon">💧</span>
+                <span class="event-text">破水</span>
+            </button>
+            <button class="event-btn" data-event="blood">
+                <span class="event-icon">🩸</span>
+                <span class="event-text">见红</span>
+            </button>
+            <button class="event-btn" data-event="push">
+                <span class="event-icon">💪</span>
+                <span class="event-text">想用力</span>
+            </button>
+        </section>
+
+        <!-- 事件时间轴 -->
+        <section id="eventsTimeline" class="events-timeline hidden">
+            <div class="timeline-title">事件记录</div>
+            <div id="eventsList" class="events-list"></div>
+        </section>
+
+        <!-- 宫缩列表 -->
+        <section class="list-section">
+            <div class="list-header">
+                <span class="list-title">宫缩记录</span>
+                <button id="organizeBtn" class="btn-text-small">整理</button>
+            </div>
+            <div id="contractionList" class="contraction-list">
+                <div class="empty-state">暂无宫缩记录</div>
+            </div>
+        </section>
+
+        <!-- 底部操作 -->
+        <section class="bottom-actions">
+            <button id="newLaborBtn" class="btn-outline">
+                <span>➕ 新建产程</span>
+            </button>
+            <button id="allHistoryBtn" class="btn-outline">
+                <span>📚 全部历史</span>
+            </button>
+        </section>
+    </main>
+
+    <!-- 历史列表页 -->
+    <main id="historyView" class="view">
+        <header class="sub-header">
+            <button id="backFromHistory" class="back-btn">← 返回</button>
+            <h2>历史产程</h2>
+        </header>
+        <div id="historyList" class="history-list">
+            <div class="empty-state">暂无历史产程</div>
+        </div>
+    </main>
+
+    <!-- 历史详情页 -->
+    <main id="historyDetailView" class="view">
+        <header class="sub-header">
+            <button id="backFromDetail" class="back-btn">← 返回</button>
+            <h2>产程详情</h2>
+        </header>
+        <div id="historyDetailContent" class="history-detail"></div>
+    </main>
+
+    <!-- 宫缩编辑页 -->
+    <main id="editView" class="view">
+        <header class="sub-header">
+            <button id="backFromEdit" class="back-btn">← 取消</button>
+            <h2>编辑宫缩</h2>
+            <button id="saveEditBtn" class="btn-primary-small">保存</button>
+        </header>
+        <div class="edit-form">
+            <div class="form-group">
+                <label>开始时间</label>
+                <input type="datetime-local" id="editStartTime">
+            </div>
+            <div class="form-group">
+                <label>结束时间</label>
+                <input type="datetime-local" id="editEndTime">
+            </div>
+            <div class="form-group">
+                <label>疼痛强度</label>
+                <div class="edit-rating">
+                    <span class="edit-star" data-value="1">☆</span>
+                    <span class="edit-star" data-value="2">☆</span>
+                    <span class="edit-star" data-value="3">☆</span>
+                    <span class="edit-star" data-value="4">☆</span>
+                    <span class="edit-star" data-value="5">☆</span>
+                </div>
+            </div>
+            <button id="deleteContractionBtn" class="btn-danger">删除此记录</button>
+        </div>
+    </main>
+
+    <!-- 设置页 -->
+    <main id="settingsView" class="view">
+        <header class="sub-header">
+            <button id="backFromSettings" class="back-btn">← 返回</button>
+            <h2>设置</h2>
+        </header>
+        <div class="settings-list">
+            <div class="setting-item">
+                <span>数据导出</span>
+                <button id="exportBtn" class="btn-outline-small">导出 JSON</button>
+            </div>
+            <div class="setting-item">
+                <span>数据导入</span>
+                <input type="file" id="importFile" accept=".json" hidden>
+                <button id="importBtn" class="btn-outline-small">导入 JSON</button>
+            </div>
+            <div class="setting-item">
+                <span>清除所有数据</span>
+                <button id="clearAllBtn" class="btn-danger-small">清除</button>
+            </div>
+            <div class="setting-info">
+                <p>⚠️ 长时间使用建议关闭屏幕常亮以节省电量</p>
+                <p>版本：v1.0 MVP</p>
+            </div>
+        </div>
+    </main>
+
+    <!-- 整理模式 -->
+    <div id="organizeBar" class="organize-bar hidden">
+        <span id="organizeCount">已选择 0 条</span>
+        <button id="cancelOrganizeBtn" class="btn-small">取消</button>
+        <button id="confirmMergeBtn" class="btn-primary-small" disabled>合并</button>
+    </div>
+
+    <script src="db.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
