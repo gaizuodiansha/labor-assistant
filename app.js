@@ -503,17 +503,24 @@ function resetChartView() {
 function renderChart() {
     const canvas = elements.chart;
     const ctx = canvas.getContext('2d');
-    const width = canvas.width, height = canvas.height;
-    const dpr = window.devicePixelRatio || 1;
     
-    // 设置高DPI支持
-    if (canvas.width !== width * dpr) {
-        canvas.width = width * dpr;
-        canvas.height = height * dpr;
-        canvas.style.width = width + 'px';
-        canvas.style.height = height + 'px';
+    // 固定逻辑尺寸 (CSS像素)
+    const logicalWidth = 375;
+    const logicalHeight = 80;
+    
+    // 初始化高DPI支持 (只执行一次)
+    if (!canvas.dataset.initialized) {
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = logicalWidth * dpr;
+        canvas.height = logicalHeight * dpr;
+        canvas.style.width = logicalWidth + 'px';
+        canvas.style.height = logicalHeight + 'px';
         ctx.scale(dpr, dpr);
+        canvas.dataset.initialized = 'true';
     }
+    
+    const width = logicalWidth;
+    const height = logicalHeight;
     
     ctx.clearRect(0, 0, width, height);
     
