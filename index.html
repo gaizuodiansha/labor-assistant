@@ -84,14 +84,25 @@
         <!-- 宫缩规律图 -->
         <section class="chart-section">
             <div class="chart-header">
-                <span class="chart-title">⏱️ 宫缩规律图（最近30分钟）</span>
+                <span class="chart-title">⏱️ 宫缩规律图</span>
+                <span id="chartRangeLabel" class="chart-range-label">30分钟</span>
             </div>
-            <canvas id="contractionChart" width="375" height="80"></canvas>
-            <div class="chart-labels">
+            <div class="chart-container" id="chartContainer">
+                <canvas id="contractionChart" width="375" height="80"></canvas>
+            </div>
+            <div class="chart-labels" id="chartLabels">
                 <span>-30m</span>
                 <span>-20m</span>
                 <span>-10m</span>
                 <span>现在</span>
+            </div>
+            <div class="chart-controls">
+                <span class="zoom-label">缩放</span>
+                <input type="range" id="zoomSlider" class="zoom-slider" min="15" max="240" value="30" step="15">
+                <span id="zoomValue" class="zoom-value">30分钟</span>
+            </div>
+            <div class="chart-hint">
+                <span>👆 左右拖动查看更早时间</span>
             </div>
         </section>
 

@@ -54,7 +54,12 @@ const appState = {
     editingContractionId: null,
     editingPainLevel: null,
     pendingMerge: null,
-    lastUndoAction: null
+    lastUndoAction: null,
+    // 图表状态
+    chartTimeRange: 30, // 分钟
+    chartTimeOffset: 0, // 毫秒，从当前时间往前的偏移
+    chartIsDragging: false,
+    chartLastX: 0
 };
 
 // ==================== DOM 元素引用 ====================
@@ -74,6 +79,11 @@ function initElements() {
         avgDuration: document.getElementById('avgDuration'),
         avgPain: document.getElementById('avgPain'),
         chart: document.getElementById('contractionChart'),
+        chartContainer: document.getElementById('chartContainer'),
+        chartLabels: document.getElementById('chartLabels'),
+        chartRangeLabel: document.getElementById('chartRangeLabel'),
+        zoomSlider: document.getElementById('zoomSlider'),
+        zoomValue: document.getElementById('zoomValue'),
         statusText: document.getElementById('statusText'),
         mainBtn: document.getElementById('mainBtn'),
         timerDisplay: document.getElementById('timerDisplay'),
@@ -221,6 +231,12 @@ function bindEvents() {
             updateEditStarDisplay(value);
         });
     });
+    
+    // 图表缩放滑块
+    elements.zoomSlider.addEventListener('input', handleZoomChange);
+    
+    // 图表拖拽事件
+    initChartDragEvents();
 }
 
 // ==================== 核心功能 ====================
@@ -371,43 +387,193 @@ function renderStats() {
     }
 }
 
+// ==================== 图表缩放和拖拽 ====================
+
+function handleZoomChange(e) {
+    appState.chartTimeRange = parseInt(e.target.value);
+    elements.zoomValue.textContent = formatZoomLabel(appState.chartTimeRange);
+    elements.chartRangeLabel.textContent = formatZoomLabel(appState.chartTimeRange);
+    renderChart();
+}
+
+function formatZoomLabel(minutes) {
+    if (minutes >= 60) {
+        const hours = minutes / 60;
+        return hours === Math.floor(hours) ? `${hours}小时` : `${(minutes / 60).toFixed(1)}小时`;
+    }
+    return `${minutes}分钟`;
+}
+
+function initChartDragEvents() {
+    const container = elements.chartContainer;
+    const canvas = elements.chart;
+    
+    // 鼠标事件
+    canvas.addEventListener('mousedown', startDrag);
+    document.addEventListener('mousemove', doDrag);
+    document.addEventListener('mouseup', endDrag);
+    
+    // 触摸事件
+    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+    canvas.addEventListener('touchend', endDrag);
+    
+    // 双击重置
+    canvas.addEventListener('dblclick', resetChartView);
+}
+
+function startDrag(e) {
+    appState.chartIsDragging = true;
+    appState.chartLastX = e.clientX;
+    elements.chartContainer.style.cursor = 'grabbing';
+}
+
+function handleTouchStart(e) {
+    if (e.touches.length === 1) {
+        appState.chartIsDragging = true;
+        appState.chartLastX = e.touches[0].clientX;
+    }
+}
+
+function doDrag(e) {
+    if (!appState.chartIsDragging) return;
+    e.preventDefault();
+    
+    const deltaX = e.clientX - appState.chartLastX;
+    appState.chartLastX = e.clientX;
+    
+    // 根据拖拽距离计算时间偏移
+    const canvas = elements.chart;
+    const timeRangeMs = appState.chartTimeRange * 60 * 1000;
+    const timeDelta = (deltaX / canvas.width) * timeRangeMs;
+    
+    appState.chartTimeOffset -= timeDelta;
+    
+    // 限制偏移范围（不能看到未来，不能早于产程开始）
+    constrainChartOffset();
+    
+    renderChart();
+}
+
+function handleTouchMove(e) {
+    if (!appState.chartIsDragging || e.touches.length !== 1) return;
+    e.preventDefault();
+    
+    const deltaX = e.touches[0].clientX - appState.chartLastX;
+    appState.chartLastX = e.touches[0].clientX;
+    
+    const canvas = elements.chart;
+    const timeRangeMs = appState.chartTimeRange * 60 * 1000;
+    const timeDelta = (deltaX / canvas.width) * timeRangeMs;
+    
+    appState.chartTimeOffset -= timeDelta;
+    constrainChartOffset();
+    renderChart();
+}
+
+function endDrag() {
+    appState.chartIsDragging = false;
+    if (elements.chartContainer) {
+        elements.chartContainer.style.cursor = 'grab';
+    }
+}
+
+function constrainChartOffset() {
+    const now = Date.now();
+    const timeRangeMs = appState.chartTimeRange * 60 * 1000;
+    
+    // 不能看到未来（偏移不能超过0）
+    if (appState.chartTimeOffset < 0) {
+        appState.chartTimeOffset = 0;
+    }
+    
+    // 不能早于产程开始前1小时（给一些余量）
+    const earliestTime = appState.currentLabor.startTime - 60 * 60 * 1000;
+    const maxOffset = now - earliestTime - timeRangeMs;
+    if (appState.chartTimeOffset > maxOffset && maxOffset > 0) {
+        appState.chartTimeOffset = maxOffset;
+    }
+}
+
+function resetChartView() {
+    appState.chartTimeOffset = 0;
+    renderChart();
+}
+
 function renderChart() {
     const canvas = elements.chart;
     const ctx = canvas.getContext('2d');
     const width = canvas.width, height = canvas.height;
+    const dpr = window.devicePixelRatio || 1;
+    
+    // 设置高DPI支持
+    if (canvas.width !== width * dpr) {
+        canvas.width = width * dpr;
+        canvas.height = height * dpr;
+        canvas.style.width = width + 'px';
+        canvas.style.height = height + 'px';
+        ctx.scale(dpr, dpr);
+    }
     
     ctx.clearRect(0, 0, width, height);
     
     const now = Date.now();
-    const thirtyMinutesAgo = now - 30 * 60 * 1000;
-    const timeRange = 30 * 60 * 1000;
+    const timeRangeMs = appState.chartTimeRange * 60 * 1000;
+    const endTime = now - appState.chartTimeOffset;
+    const startTime = endTime - timeRangeMs;
     
-    const recentContractions = appState.currentLabor.contractions.filter(c => 
-        c.start >= thirtyMinutesAgo || (c.end && c.end >= thirtyMinutesAgo)
-    );
-    
+    // 绘制网格线
     ctx.strokeStyle = '#E0E0E0';
     ctx.lineWidth = 1;
-    for (let i = 0; i <= 3; i++) {
+    const gridCount = 4;
+    for (let i = 0; i <= gridCount; i++) {
+        const x = (i / gridCount) * width;
         ctx.beginPath();
-        ctx.moveTo((i / 3) * width, 0);
-        ctx.lineTo((i / 3) * width, height);
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, height);
         ctx.stroke();
     }
     
+    // 绘制宫缩
     ctx.fillStyle = '#E57373';
-    recentContractions.forEach(contraction => {
-        const startX = ((contraction.start - thirtyMinutesAgo) / timeRange) * width;
-        const endTime = contraction.end || now;
-        const duration = endTime - contraction.start;
-        const widthPx = Math.min((duration / timeRange) * width, 60);
+    appState.currentLabor.contractions.forEach(contraction => {
+        // 只绘制在时间范围内的宫缩
+        if (contraction.end && contraction.end < startTime) return;
+        if (contraction.start > endTime) return;
         
-        if (startX + widthPx > 0) {
-            const x = Math.max(0, startX);
-            const w = Math.min(widthPx, width - x);
-            ctx.fillRect(x, height * 0.2, w, height * 0.6);
+        const contractionStart = Math.max(contraction.start, startTime);
+        const contractionEnd = contraction.end ? Math.min(contraction.end, endTime) : endTime;
+        
+        const startX = ((contractionStart - startTime) / timeRangeMs) * width;
+        const duration = contractionEnd - contractionStart;
+        const widthPx = Math.max(2, (duration / timeRangeMs) * width);
+        
+        // 根据疼痛程度调整颜色深浅
+        if (contraction.painLevel) {
+            const opacity = 0.5 + (contraction.painLevel / 10);
+            ctx.fillStyle = `rgba(229, 115, 115, ${opacity})`;
+        } else {
+            ctx.fillStyle = '#E57373';
         }
+        
+        ctx.fillRect(startX, height * 0.15, widthPx, height * 0.7);
     });
+    
+    // 更新标签
+    updateChartLabels(startTime, endTime);
+}
+
+function updateChartLabels(startTime, endTime) {
+    const timeRangeMs = endTime - startTime;
+    const labels = [];
+    const count = 4;
+    
+    for (let i = 0; i < count; i++) {
+        const time = startTime + (i / (count - 1)) * timeRangeMs;
+        labels.push(formatTime(time));
+    }
+    
+    elements.chartLabels.innerHTML = labels.map(t => `<span>${t}</span>`).join('');
 }
 
 function renderContractionList() {
@@ -628,6 +794,9 @@ async function startNewLabor() {
     };
     appState.isContracting = false;
     appState.currentContractionStart = null;
+    
+    // 重置图表视图
+    resetChartView();
     
     await db.saveCurrentLabor(appState.currentLabor);
     render();
