@@ -443,11 +443,13 @@ function doDrag(e) {
     appState.chartLastX = e.clientX;
     
     // 根据拖拽距离计算时间偏移
-    const canvas = elements.chart;
+    // 向右滑动(deltaX>0) -> 想看更早的时间 -> timeOffset 增加
+    // 向左滑动(deltaX<0) -> 想看更新的时间 -> timeOffset 减少
+    const canvasWidth = elements.chart.clientWidth;
     const timeRangeMs = appState.chartTimeRange * 60 * 1000;
-    const timeDelta = (deltaX / canvas.width) * timeRangeMs;
+    const timeDelta = (deltaX / canvasWidth) * timeRangeMs;
     
-    appState.chartTimeOffset -= timeDelta;
+    appState.chartTimeOffset += timeDelta;
     
     // 限制偏移范围（不能看到未来，不能早于产程开始）
     constrainChartOffset();
@@ -462,11 +464,11 @@ function handleTouchMove(e) {
     const deltaX = e.touches[0].clientX - appState.chartLastX;
     appState.chartLastX = e.touches[0].clientX;
     
-    const canvas = elements.chart;
+    const canvasWidth = elements.chart.clientWidth;
     const timeRangeMs = appState.chartTimeRange * 60 * 1000;
-    const timeDelta = (deltaX / canvas.width) * timeRangeMs;
+    const timeDelta = (deltaX / canvasWidth) * timeRangeMs;
     
-    appState.chartTimeOffset -= timeDelta;
+    appState.chartTimeOffset += timeDelta;
     constrainChartOffset();
     renderChart();
 }
