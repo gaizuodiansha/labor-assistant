@@ -393,6 +393,8 @@ function handleZoomChange(e) {
     appState.chartTimeRange = parseInt(e.target.value);
     elements.zoomValue.textContent = formatZoomLabel(appState.chartTimeRange);
     elements.chartRangeLabel.textContent = formatZoomLabel(appState.chartTimeRange);
+    // 缩放时重新计算偏移限制，确保视图范围有效
+    constrainChartOffset();
     renderChart();
 }
 
@@ -489,11 +491,24 @@ function constrainChartOffset() {
         appState.chartTimeOffset = 0;
     }
     
-    // 不能早于产程开始前1小时（给一些余量）
+    // 计算最早可显示时间（产程开始前1小时）
     const earliestTime = appState.currentLabor.startTime - 60 * 60 * 1000;
+    
+    // 计算最大偏移量：确保 startTime 不会早于 earliestTime
+    // startTime = endTime - timeRangeMs = (now - offset) - timeRangeMs
+    // 要求: startTime >= earliestTime
+    // 即: (now - offset) - timeRangeMs >= earliestTime
+    // 即: offset <= now - timeRangeMs - earliestTime
     const maxOffset = now - earliestTime - timeRangeMs;
-    if (appState.chartTimeOffset > maxOffset && maxOffset > 0) {
-        appState.chartTimeOffset = maxOffset;
+    
+    if (maxOffset > 0) {
+        // 有足够的历史数据可以滚动
+        if (appState.chartTimeOffset > maxOffset) {
+            appState.chartTimeOffset = maxOffset;
+        }
+    } else {
+        // 时间范围太大，无法滚动（显示所有数据）
+        appState.chartTimeOffset = 0;
     }
 }
 
