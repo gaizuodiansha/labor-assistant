@@ -396,11 +396,16 @@ function renderStats() {
 // ==================== 图表缩放和拖拽 ====================
 
 function handleZoomChange(e) {
-    appState.chartTimeRange = parseInt(e.target.value);
+    const oldTimeRange = appState.chartTimeRange;
+    const newTimeRange = parseInt(e.target.value);
+    appState.chartTimeRange = newTimeRange;
     elements.zoomValue.textContent = formatZoomLabel(appState.chartTimeRange);
     elements.chartRangeLabel.textContent = formatZoomLabel(appState.chartTimeRange);
-    // 缩放时重新计算偏移限制，确保视图范围有效
-    constrainChartOffset();
+    
+    // 缩放时保持右边界对齐到最新数据（偏移量设为0）
+    // 这样可以确保最新宫缩始终显示在右侧
+    appState.chartTimeOffset = 0;
+    
     renderChart();
 }
 
@@ -549,8 +554,10 @@ function renderChart() {
     
     const now = Date.now();
     const timeRangeMs = appState.chartTimeRange * 60 * 1000;
-    // 添加未来缓冲区：右边界延伸到未来10分钟，确保正在进行的宫缩可见
-    const futureBufferMs = 10 * 60 * 1000;
+    // "现在"对齐到图表右侧 90% 位置，留出 10% 空间显示正在进行的宫缩
+    // 这样无论时间范围多大，最新数据始终显示在右侧附近
+    const futureBufferRatio = 0.1; // 10% 的未来缓冲区
+    const futureBufferMs = timeRangeMs * futureBufferRatio;
     const endTime = now - appState.chartTimeOffset + futureBufferMs;
     const startTime = endTime - timeRangeMs;
     
