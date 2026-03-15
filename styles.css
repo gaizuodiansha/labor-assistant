@@ -849,6 +849,15 @@ body {
     border-radius: 2px;
 }
 
+/* ===== 版本号 ===== */
+.version-info {
+    text-align: center;
+    font-size: 11px;
+    color: var(--text-muted);
+    padding: 8px;
+    margin-top: 8px;
+}
+
 /* ===== 响应式 ===== */
 @media (min-width: 768px) {
     body {
