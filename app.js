@@ -543,7 +543,9 @@ function renderChart() {
     
     const now = Date.now();
     const timeRangeMs = appState.chartTimeRange * 60 * 1000;
-    const endTime = now - appState.chartTimeOffset;
+    // 添加未来缓冲区：右边界延伸到未来10分钟，确保正在进行的宫缩可见
+    const futureBufferMs = 10 * 60 * 1000;
+    const endTime = now - appState.chartTimeOffset + futureBufferMs;
     const startTime = endTime - timeRangeMs;
     
     // 绘制网格线
@@ -588,13 +590,21 @@ function renderChart() {
 }
 
 function updateChartLabels(startTime, endTime) {
+    const now = Date.now();
     const timeRangeMs = endTime - startTime;
     const labels = [];
     const count = 4;
     
     for (let i = 0; i < count; i++) {
-        const time = startTime + (i / (count - 1)) * timeRangeMs;
-        labels.push(formatTime(time));
+        const ratio = i / (count - 1);
+        const time = startTime + ratio * timeRangeMs;
+        
+        // 如果这个时间点接近现在（10分钟内），显示"现在"
+        if (Math.abs(time - now) < 10 * 60 * 1000) {
+            labels.push('现在');
+        } else {
+            labels.push(formatTime(time));
+        }
     }
     
     elements.chartLabels.innerHTML = labels.map(t => `<span>${t}</span>`).join('');
